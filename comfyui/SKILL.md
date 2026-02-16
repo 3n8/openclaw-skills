@@ -23,37 +23,21 @@ All interaction is over HTTP with your remote ComfyUI server at **http://Hel:818
 ## CLI Flags
 ```
 --prompt-file /path/to/prompt.txt  # REQUIRED - avoids CLI quoting issues!
---follow                          # Wait for completion + download (sequential, verbose)
+--follow                          # Same as default but shows verbose output (for debugging)
 ```
 
-## How to Generate Multiple Images
+## How to Generate Images
 
-**DEFAULT (parallel - recommended):**
+**Just use --prompt-file - it queues, waits, and downloads automatically:**
+
 ```bash
-# Queue all 5 at once - returns immediately after each queue:
-echo "prompt 1" > /tmp/p1.txt
-python3 comfyui_run.py --prompt-file /tmp/p1.txt
-
-echo "prompt 2" > /tmp/p2.txt
-python3 comfyui_run.py --prompt-file /tmp/p2.txt
-
-echo "prompt 3" > /tmp/p3.txt
-python3 comfyui_run.py --prompt-file /tmp/p3.txt
-# ... etc
+echo "your prompt here" > /tmp/p.txt
+python3 comfyui_run.py --prompt-file /tmp/p.txt
 ```
 
-**Then wait for each to complete:**
-```bash
-# Use --await with the prompt_ids from above:
-python3 comfyui_run.py --await <prompt_id_1>
-python3 comfyui_run.py --await <prompt_id_2>
-python3 comfyui_run.py --await <prompt_id_3>
-```
+That's it! The script handles everything - queue, wait for completion, download.
 
-**--follow (sequential mode):**
-- Use this when you want the script to wait for completion before returning
-- Shows verbose output
-- Good for single images when you want progress feedback
+**--follow** does the same thing but shows verbose output (for debugging).
 
 ```bash
 # CORRECT for single image:
