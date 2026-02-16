@@ -22,24 +22,62 @@ All interaction is over HTTP with your remote ComfyUI server at **http://Hel:818
 
 ## CLI Flags
 ```
---prompt-file /path/to/prompt.txt  # REQUIRED for prompts - avoids CLI quoting issues!
---prompt "short prompt"           # Only for very short simple prompts
---negative "negative prompt"        # Optional
---follow                          # ALMOST NEVER USE - only for special cases
+--prompt-file /path/to/prompt.txt  # REQUIRED - avoids CLI quoting issues!
+--follow                          # Queue and return immediately (for parallel queuing)
+--await <prompt_id>               # Wait for completion + download
 ```
 
-**IMPORTANT:**
-- Use `--prompt-file` for ANY prompt - it avoids CLI quoting issues that cause silent failures!
-- Only use bare `--prompt` for very short simple prompts (under 50 chars)
-- Do NOT use `--follow` unless specifically asked - default handles everything!
+## How to Generate Multiple Images (IMPORTANT!)
+
+**For multiple images, you MUST queue them ALL FIRST, then wait for each:**
+
+**Step 1: Queue all images at once (parallel)**
+```bash
+# For 5 images, use --follow to queue each quickly:
+echo "prompt 1" > /tmp/p1.txt
+python3 comfyui_run.py --prompt-file /tmp/p1.txt --follow
+
+echo "prompt 2" > /tmp/p2.txt
+python3 comfyui_run.py --prompt-file /tmp/p2.txt --follow
+
+echo "prompt 3" > /tmp/p3.txt
+python3 comfyui_run.py --prompt-file /tmp/p3.txt --follow
+
+# ... continue for all 5
+```
+Each --follow returns a prompt_id. SAVE these IDs!
+
+**Step 2: Wait for each to complete**
+```bash
+# Wait for each to finish and download (can be parallel or sequential)
+python3 comfyui_run.py --await <prompt_id_1>
+python3 comfyui_run.py --await <prompt_id_2>
+python3 comfyui_run.py --await <prompt_id_3>
+# ... etc
+```
+
+**Why?**
+- --follow: queues and returns immediately (doesn't wait for generation)
+- --await: waits for completion AND downloads the image
+- This allows all 5 to queue at once and work in parallel on GPU
+- Each --follow call should return: "status": "queued" with a prompt_id
+- Each --await call should return: "status": "success" with local_images path when done
+
+**Why?**
+- --follow: queues and returns immediately (doesn't wait for generation)
+- --await: waits for completion AND downloads the image
+- This allows all 5 to queue at once and work in parallel on GPU
+- Each --follow call should return: "status": "queued" with a prompt_id
+- Each --await call should return: "status": "success" with local_images path when done
+
+**For SINGLE image: Just use --prompt-file (it will wait for completion automatically)**
+
+**For MULTIPLE images: Use --follow + --await as shown above!**
 
 ```bash
-# CORRECT - always use prompt-file:
+# CORRECT for single image:
 echo "your prompt here" > /tmp/p.txt
 python3 comfyui_run.py --prompt-file /tmp/p.txt
-
-# WRONG - will likely fail due to CLI quoting:
-python3 comfyui_run.py --prompt "your prompt here"
 ```
 
 **DO NOT use these flags (they don't exist):**
