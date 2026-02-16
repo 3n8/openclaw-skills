@@ -1,0 +1,132 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 113080783256604,
+      "steps": 20,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "ponyDiffusionV6XL_v6StartWithThisOne.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "score_9, score_8_up, score_7_up, masterpiece, hyperrealistic photoreal 16k uhd insane detail subsurface scattering pores veins sweat cum physics, dark infinite space bg crimson red nebulae god rays rimlight infernal hellfire flames demonic runes lava glow, five petite goth devilspawn sluts ORGY PILE FRENZY entangled writhing full body visible, pale/tanned flawless skin no dark negroids, [Agrat blonde blue ahegao, Eisheth fiery amber begging, Lilith ruby emerald rolled, Naamah purple violet deranged, Raven black ruby ecstasy—all black/red horns black metal collars chained black thighhigh stockings garters juicy thighs petite hourglass ripped abs wide hips], ripped torn clothes rags nipple piercings silver barbell puffy erect leaking milk cum, Z++++++ beachball x5 macromastia udders sagging hyper heavy veiny lactating nipples pierced:5, backs arched legs splayed knees-breasts contortion soles up toes clenched wrists cuffed ankles spreader asses pussies bucked thrusting ORGY, extreme gaping prolapsed pussies anuses pink walls everted slick cum lube fart bubbles squirting puddles drool rivers glossy fluids detailed uncensored puffy labia clitoris minora stretched dripping thick semen squirting arcs Raven-pos_v4 bondage_master, faces desperate cock ahegao crossed eyes tears snot blush ruined makeup tongues wrestling cum-globs",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "score_6_down, score_5_down, worst quality, low quality,\nbad anatomy, deformed, mutated, extra limbs, missing limbs, bad hands, bad feet, asymmetrical shoulders, uneven shoulders, crooked posture,\n\ncropped head, head cut off, cropped legs, legs cut off, missing feet, cut off body parts, close-up, zoomed in, upper body only,\n\ntall woman, long legs, very long legs, amazonian height, tall stature, large frame, oversized proportions, leggy, long-limbed,\n\nwings not attached to shoulders, floating wings, detached wings, white wings, colorful wings, glowing wings, oversized wings,\n\ncartoon style, 90s cartoon, retro cartoon, thick black outlines, cel shading, anime style, semi-stylized, painterly, illustration, sketch, 3d render, cgi, doll skin, plastic skin, shiny plastic, uncanny valley, over-smoothed skin,\n\nblurry face, low detail face, deformed face, malformed face, ugly face, asymmetrical face, uncanny face,\n\npurple tongue, colored tongue, unnatural tongue color, forehead gem, jewel on forehead, third eye, red dot on forehead,\n\nbeach, ocean, sunset, sky, horizon, scenic background, outdoor,\n\nclothing, underwear, censored, mosaic,\nflat chest, small breasts,\ntext, watermark, signature, logo",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "model_name": "4x_foolhardy_Remacri.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "Load Upscale Model"
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": [
+        "8",
+        0
+      ],
+      "upscale_model": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "Upscale Image (AI)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

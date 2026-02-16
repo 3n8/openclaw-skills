@@ -1,0 +1,107 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 16059484342965915653,
+      "steps": 20,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "ponyDiffusionV6XL_v6StartWithThisOne.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "photorealistic hyperrealistic ultra detailed 8k masterpiece best quality score_9 score_8_up score_7_up sharp focus high dynamic range subsurface scattering skin pores freckles veins sweat beads realistic viscous fluids cum lube saliva glossy wet highlights insane hyperrealism 16k uhd octane pbr textures subsurface scattering sweat beads viscous cum strings dripping physics, top down ultra wide angle pov petite goth bimbo cumslut degraded fuckpig BDSM whore, seductive red ruby eyes ecstasy ahegao long tongue lolled dripping saliva cum ropes glossy lips blush perfect makeup eyelashes flawless pale skin pores, black collar D-ring, red ballgag drool pooling breasts chins, nipple clamp chains weights distending hyper colossal macromastia breasts 50% larger beachball+++ ultra heavy sag veins puffy dark areolae nipples clamped pierced erect lactating cum glazed udders hyper detailed face flawless intricate eyes lips skin pores, legs spread maximally wide knees crushed breasts calves heads contortion soles up toes clenched feet arches, ankles chained spreader bar wrists cuffed pulling legs exposing ass pussy hips bucked sheets, girthy dildo anus gaping prolapsed rosebud pink walls creamy cum overflowing gushing puddles thighs, pussy puffy labia clitoris minora dripping semen squirting fluids glistening pale skin rimlight god rays bokeh dark bedroom, 500x500 resolution",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "score_6_down worst quality low quality bad anatomy deformed extra limbs bad hands feet asymmetrical cropped tall long legs cartoon anime 3d cgi doll blurry deformed ugly flat small breasts penis testicles futa lowres jpeg artifacts closed legs small breasts low face detail",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI_2026-02-07_08:02:29_Realistic",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}
