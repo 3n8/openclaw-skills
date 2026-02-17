@@ -72,8 +72,9 @@ def http_json(server_url, url_path, method="GET", payload=None):
 
 
 UPSCALER_MODELS = {
-    "2x": "RealESRGAN_x2plus.pth",
-    "4x": "4x_foolhardy_Remacri.pth",
+    "2x": "RealESRGAN_x2.pth",
+    "4x": "RealESRGAN_x4.pth",
+    "4x_legacy": "4x_foolhardy_Remacri.pth",
 }
 
 
@@ -95,9 +96,8 @@ def prepare_tmp_workflow(prompt, negative=None, upscaler="2x"):
         workflow["3"]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
 
     if "9" in workflow and "model_name" in workflow["9"]["inputs"]:
-        workflow["9"]["inputs"]["model_name"] = UPSCALER_MODELS.get(
-            upscaler, UPSCALER_MODELS["2x"]
-        )
+        model_key = upscaler if upscaler in UPSCALER_MODELS else "4x"
+        workflow["9"]["inputs"]["model_name"] = UPSCALER_MODELS[model_key]
         print_and_log(
             f"Using {upscaler} upscaler: {workflow['9']['inputs']['model_name']}"
         )
@@ -272,8 +272,8 @@ def main():
         parser.add_argument(
             "--upscaler",
             default="2x",
-            choices=["2x", "4x"],
-            help="Upscaler model: 2x (default, faster) or 4x (slower, higher res)",
+            choices=["2x", "4x", "4x_legacy"],
+            help="Upscaler model: 2x (default), 4x, or 4x_legacy",
         )
         args = parser.parse_args()
 
@@ -287,7 +287,9 @@ def main():
 
         prompt_path = Path(args.positive).expanduser().resolve()
         if not prompt_path.exists():
-            raise FileNotFoundError(f"Positive prompt file not found: {prompt_path}")
+            raise FileNotFoundError(
+                f"Positive prompt file not found: {prompt_path}. You must CREATE the file first - the script does not create files for you. Example: echo 'your prompt' > /tmp/positive.txt"
+            )
         prompt = prompt_path.read_text(encoding="utf-8").strip()
         prompt_name = prompt_path.stem
 
@@ -300,7 +302,9 @@ def main():
         log_prompt(prompt, prompt_name)
 
         if not prompt or not prompt.strip():
-            raise ValueError("Error: --positive file cannot be empty")
+            raise ValueError(
+                "Error: --positive file is EMPTY! You must write a prompt to the file first. Example: echo 'beautiful landscape' > /tmp/positive.txt"
+            )
 
         if negative and len(negative) > 5000:
             print_and_log(

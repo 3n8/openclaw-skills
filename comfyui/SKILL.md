@@ -24,13 +24,13 @@ All interaction is over HTTP with your remote ComfyUI server at **http://Hel:818
 ```
 --positive /path/to/positive.txt      # REQUIRED - positive prompt file
 --negative-file /path/to/negative.txt # OPTIONAL - negative prompt file
---upscaler 2x                          # Upscaler: 2x (default, faster) or 4x (slower, higher res)
+--upscaler 2x                          # Upscaler: 2x (default), 4x, or 4x_legacy
 --follow                              # Same as default but shows verbose output (for debugging)
 ```
 
 **The script does NOT accept prompts directly on the command line. You MUST use files.**
 
-**Default upscaler is 2x** (1024→2048). Use `--upscaler 4x` for 4x upscaling (1024→4096, slower but higher resolution).
+**Default upscaler is 2x** (RealESRGAN_x2, 1024→2048). Use `--upscaler 4x` for higher resolution (RealESRGAN_x4, 1024→4096), or `--upscaler 4x_legacy` for 4x_foolhardy_Remacri.
 
 ## How to Generate Images
 
@@ -55,38 +55,49 @@ python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp
 
 ## CRITICAL: Multiple Images MUST be Parallel!
 
-If the user wants 10 images, you MUST queue all 10 at once in PARALLEL:
+**YOU MUST USE `&` AT THE END OF EVERY COMMAND! WITHOUT `&` IT WILL ONLY GENERATE ONE IMAGE!**
+
+If the user wants 3 images, do THIS EXACTLY:
 
 ```bash
-# DO NOT wait for one to finish before starting the next!
-# ALL OF THESE MUST RUN AT THE SAME TIME:
+# FIRST: Create the prompt files
+echo "prompt 1" > /tmp/p1.txt
+echo "prompt 2" > /tmp/p2.txt  
+echo "prompt 3" > /tmp/p3.txt
 
+# SECOND: Queue ALL THREE AT ONCE - MUST USE & ON EACH LINE!
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p1.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p2.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p3.txt &
+
+# THIRD: Wait for all to finish
+wait
+```
+
+If you do NOT use `&`, only ONE image will generate. The `&` is MANDATORY!
+
+**Example for 5 images:**
+
+```bash
+# Create files first
+echo "your first prompt" > /tmp/p1.txt
+echo "your second prompt" > /tmp/p2.txt
+echo "your third prompt" > /tmp/p3.txt
+echo "your fourth prompt" > /tmp/p4.txt
+echo "your fifth prompt" > /tmp/p5.txt
+
+# Queue ALL FIVE at once - & IS REQUIRED ON EACH LINE!
 exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p1.txt &
 exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p2.txt &
 exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p3.txt &
 exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p4.txt &
 exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p5.txt &
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p6.txt &
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p7.txt &
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p8.txt &
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p9.txt &
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p10.txt &
 
 # Wait for all to complete
 wait
 ```
 
-The `&` runs each command in background so they all queue at once!
-
-**DO NOT:**
-- Wait for image 1 to finish before starting image 2
-- Run them one by one
-- Be slow
-
-**DO:**
-- Queue all at once using `&`
-- They will all generate in parallel on the GPU
-- The script will automatically wait and download each one
+**THE `&` SYMBOL IS REQUIRED AT THE END OF EVERY COMMAND! WITHOUT IT, ONLY ONE IMAGE WILL BE GENERATED!**
 
 **DO NOT use these flags (they don't exist and will cause errors):**
 - `--prompt`, `--prompt-file` (use `--positive` instead)
