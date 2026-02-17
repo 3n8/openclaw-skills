@@ -20,22 +20,36 @@ All interaction is over HTTP with your remote ComfyUI server at **http://Hel:818
 ## Default Timeout: 15 minutes
 **Each image generation has 15 minutes (900 seconds) to complete.** The script will wait up to 15 minutes for each image. Do not assume failure if it takes time - check the queue!
 
-## CLI Flags
+## CLI Flags (REQUIRED)
 ```
---prompt-file /path/to/prompt.txt  # REQUIRED - avoids CLI quoting issues!
---follow                          # Same as default but shows verbose output (for debugging)
+--positive /path/to/positive.txt      # REQUIRED - positive prompt file
+--negative-file /path/to/negative.txt # OPTIONAL - negative prompt file
+--upscaler 2x                          # Upscaler: 2x (default, faster) or 4x (slower, higher res)
+--follow                              # Same as default but shows verbose output (for debugging)
 ```
+
+**The script does NOT accept prompts directly on the command line. You MUST use files.**
+
+**Default upscaler is 2x** (1024→2048). Use `--upscaler 4x` for 4x upscaling (1024→4096, slower but higher resolution).
 
 ## How to Generate Images
 
-**Just use --prompt-file - it queues, waits, and downloads automatically:**
+**Write prompts to files, then run:**
 
 ```bash
-echo "your prompt here" > /tmp/p.txt
-python3 comfyui_run.py --prompt-file /tmp/p.txt
+echo "your prompt here" > /tmp/positive.txt
+python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/positive.txt
 ```
 
 That's it! The script handles everything - queue, wait for completion, download.
+
+**With negative prompt:**
+
+```bash
+echo "your positive prompt" > /tmp/positive.txt
+echo "bad quality, blurry" > /tmp/negative.txt
+python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/positive.txt --negative-file /tmp/negative.txt
+```
 
 **--follow** does the same thing but shows verbose output (for debugging).
 
@@ -47,16 +61,16 @@ If the user wants 10 images, you MUST queue all 10 at once in PARALLEL:
 # DO NOT wait for one to finish before starting the next!
 # ALL OF THESE MUST RUN AT THE SAME TIME:
 
-exec python3 comfyui_run.py --prompt-file /tmp/p1.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p2.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p3.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p4.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p5.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p6.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p7.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p8.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p9.txt &
-exec python3 comfyui_run.py --prompt-file /tmp/p10.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p1.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p2.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p3.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p4.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p5.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p6.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p7.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p8.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p9.txt &
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/p10.txt &
 
 # Wait for all to complete
 wait
@@ -74,19 +88,15 @@ The `&` runs each command in background so they all queue at once!
 - They will all generate in parallel on the GPU
 - The script will automatically wait and download each one
 
-```bash
-# CORRECT for single image:
-echo "your prompt here" > /tmp/p.txt
-python3 comfyui_run.py --prompt-file /tmp/p.txt
-```
-
-**DO NOT use these flags (they don't exist):**
-- `--generate`, `--output`, `-g`, `-o`, `--queue-only` - these will cause errors!
+**DO NOT use these flags (they don't exist and will cause errors):**
+- `--prompt`, `--prompt-file` (use `--positive` instead)
+- `--negative` (use `--negative-file` instead)
+- `--generate`, `--output`, `-g`, `-o`, `--queue-only`
 
 ## Troubleshooting
 
 **If command seems to run but nothing queues:**
-- Use `--prompt-file` instead of `--prompt` to avoid CLI quoting issues
+- Use `--positive` (not `--prompt-file` or `--prompt`)
 - Check ComfyUI queue: `curl http://Hel:8188/queue`
 
 ## CRITICAL: Do NOT spawn sub-agents for image generation!
@@ -99,9 +109,9 @@ Wrong (FAILS):
 
 Correct (WORKS):
 ```bash
-# ALWAYS use prompt-file - write prompt to file first:
-echo "your prompt here" > /tmp/prompt.txt
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --prompt-file /tmp/prompt.txt
+# ALWAYS use --positive - write prompt to file first:
+echo "your prompt here" > /tmp/positive.txt
+exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --positive /tmp/positive.txt
 ```
 The script queues, waits for generation, and downloads automatically. Easy!
 
@@ -109,16 +119,8 @@ The script queues, waits for generation, and downloads automatically. Easy!
 - The script automatically queues, waits for completion, and downloads the image.
 - No need for two-step process anymore!
 
-**For multiple images: Run them sequentially (one after another)**
+## Verification
 
-## Simple Workflow
-
-Just use `--prompt` - the script handles everything:
-```bash
-exec python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --prompt "your prompt here"
-```
-
-Returns `"status": "success"` with filepath when done. That's it!
 **Never tell the user an image was generated successfully without verifying it!**
 
 Before claiming success, you MUST verify:
@@ -150,38 +152,6 @@ Before claiming success, you MUST verify:
 **Prompt Length Warning**
 Keep prompts under 2000 characters when possible. Very long prompts may be truncated by language models or cause context overflow issues.
 
-## Usage Examples
-
-### Single image generation
-```bash
-# Always use prompt-file:
-echo "a beautiful sunset over the ocean" > /tmp/prompt.txt
-python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --prompt-file /tmp/prompt.txt
-```
-
-### With negative prompt
-```bash
-echo "your prompt" > /tmp/p.txt
-python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --prompt-file /tmp/p.txt --negative "bad quality, blurry"
-```
-
-### Using prompt file (recommended for long prompts)
-Useful for complex prompts with special characters that might cause CLI quoting issues:
-```bash
-echo "your very long prompt with special characters :;'" > /tmp/prompt.txt
-python3 /home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py --prompt-file /tmp/prompt.txt
-```
-
-### Multiple images
-Run them sequentially (wait for each to complete before starting next):
-```bash
-exec python3 comfyui_run.py --prompt "image 1 description"
-# Wait for completion, then next...
-exec python3 comfyui_run.py --prompt "image 2 description"
-# Wait for completion, then next...
-exec python3 comfyui_run.py --prompt "image 3 description"
-```
-
 ## Output Format - What to Report to User
 
 **Single command handles everything:**
@@ -198,7 +168,7 @@ exec python3 comfyui_run.py --prompt "image 3 description"
 ## IMPORTANT: Use the skill script!
 **Do NOT use any .sh or .json files from agent workspaces.** Only use:
 - Script: `/home/en/.openclaw/skills/comfyui/scripts/comfyui_run.py`
-- Default workflow: `/home/en/.openclaw/skills/comfyui/assets/default-workflow.json`
+- Default workflow: `/home/en/.openclaw/skills/comfyui/assets/imagegen_workflow.json`
 - Output directory: `/home/en/Downloads/ComfyUI/`
 
 Always outputs structured JSON at the end for reliable agent parsing.

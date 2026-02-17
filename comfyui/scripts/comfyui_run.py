@@ -16,13 +16,26 @@ import urllib.error
 from pathlib import Path
 from urllib.parse import quote
 import uuid
+from datetime import datetime
 
 SKILL_BASE = Path("/home/en/.openclaw/skills/comfyui").resolve()
 ASSETS_DIR = SKILL_BASE / "assets"
-DEFAULT_WORKFLOW = ASSETS_DIR / "default-workflow.json"
+DEFAULT_WORKFLOW = ASSETS_DIR / "imagegen_workflow.json"
 
 LOCAL_DOWNLOAD_DIR = Path(os.path.expanduser("~/Downloads/ComfyUI"))
 LOCAL_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+LOG_DIR = Path("/home/en/.openclaw/logs/ComfyUI")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def log_prompt(prompt, name=None):
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    if name is None:
+        name = "prompt"
+    log_path = LOG_DIR / f"{timestamp}-{name}.log"
+    log_path.write_text(prompt, encoding="utf-8")
+
 
 final_result = {
     "status": "failed",
@@ -58,7 +71,13 @@ def http_json(server_url, url_path, method="GET", payload=None):
         raise
 
 
-def prepare_tmp_workflow(prompt, negative=None):
+UPSCALER_MODELS = {
+    "2x": "RealESRGAN_x2plus.pth",
+    "4x": "4x_foolhardy_Remacri.pth",
+}
+
+
+def prepare_tmp_workflow(prompt, negative=None, upscaler="2x"):
     print_and_log("Loading default workflow...")
     if not DEFAULT_WORKFLOW.exists():
         final_result["error"] = f"Default workflow missing: {DEFAULT_WORKFLOW}"
@@ -74,6 +93,14 @@ def prepare_tmp_workflow(prompt, negative=None):
         workflow["7"]["inputs"]["text"] = negative
     if "3" in workflow:
         workflow["3"]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
+
+    if "9" in workflow and "model_name" in workflow["9"]["inputs"]:
+        workflow["9"]["inputs"]["model_name"] = UPSCALER_MODELS.get(
+            upscaler, UPSCALER_MODELS["2x"]
+        )
+        print_and_log(
+            f"Using {upscaler} upscaler: {workflow['9']['inputs']['model_name']}"
+        )
 
     tmp_workflow = ASSETS_DIR / f"tmp-workflow-{uuid.uuid4().hex[:8]}.json"
     print_and_log(f"Writing unique workflow: {tmp_workflow.name}...")
@@ -206,15 +233,14 @@ def main():
     try:
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--prompt",
-            help="Image generation prompt (or use --prompt-file)",
+            "--positive",
+            required=True,
+            help="File containing positive prompt (REQUIRED)",
         )
         parser.add_argument(
-            "--prompt-file",
-            help="File containing prompt (useful for long prompts with special chars)",
-        )
-        parser.add_argument(
-            "--negative", default=None, help="Negative prompt (optional)"
+            "--negative-file",
+            default=None,
+            help="File containing negative prompt (optional)",
         )
         parser.add_argument(
             "--workflow",
@@ -243,27 +269,40 @@ def main():
             default=None,
             help="Poll for completion of a previously queued prompt (provide prompt_id)",
         )
+        parser.add_argument(
+            "--upscaler",
+            default="2x",
+            choices=["2x", "4x"],
+            help="Upscaler model: 2x (default, faster) or 4x (slower, higher res)",
+        )
         args = parser.parse_args()
 
-        # Default: queue and wait for completion (auto-await)
-        # Use --follow to only queue and return immediately
-        await_completion = not args.follow
+        # Default: queue and wait for completion + download
+        # --follow: same but with verbose output
+        verbose = args.follow
 
         if args.await_prompt_id:
             await_poll_only(args.server, args.await_prompt_id, args.maxwait)
             return
 
-        prompt = args.prompt
-        if args.prompt_file:
-            prompt_path = Path(args.prompt_file).expanduser().resolve()
-            if not prompt_path.exists():
-                raise FileNotFoundError(f"Prompt file not found: {prompt_path}")
-            prompt = prompt_path.read_text(encoding="utf-8").strip()
+        prompt_path = Path(args.positive).expanduser().resolve()
+        if not prompt_path.exists():
+            raise FileNotFoundError(f"Positive prompt file not found: {prompt_path}")
+        prompt = prompt_path.read_text(encoding="utf-8").strip()
+        prompt_name = prompt_path.stem
+
+        negative = None
+        if args.negative_file:
+            neg_path = Path(args.negative_file).expanduser().resolve()
+            if neg_path.exists():
+                negative = neg_path.read_text(encoding="utf-8").strip()
+
+        log_prompt(prompt, prompt_name)
 
         if not prompt or not prompt.strip():
-            raise ValueError("Error: --prompt or --prompt-file cannot be empty")
+            raise ValueError("Error: --positive file cannot be empty")
 
-        if args.negative and len(args.negative) > 5000:
+        if negative and len(negative) > 5000:
             print_and_log(
                 "Warning: Negative prompt is very long (>5000 chars), this may cause issues"
             )
@@ -275,7 +314,7 @@ def main():
             workflow_path = Path(args.workflow).expanduser().resolve()
             print_and_log(f"Custom workflow: {workflow_path}")
         else:
-            workflow_path = prepare_tmp_workflow(prompt, args.negative)
+            workflow_path = prepare_tmp_workflow(prompt, negative, args.upscaler)
 
         print_and_log(f"Queueing on {server_url}...")
         prompt_id = queue_prompt(server_url, workflow_path)
@@ -287,50 +326,48 @@ def main():
         if not verify_queued_or_history(server_url, prompt_id):
             raise ValueError(f"Prompt {prompt_id} not found in queue after submission")
 
-        if not await_completion:
-            final_result["status"] = "queued"
-            final_result["error"] = None
-        else:
-            result = poll_history(server_url, prompt_id, args.maxwait)
+        # Always wait for completion and download (default behavior)
+        # --follow just adds verbose output
+        verbose = args.follow
+        result = poll_history(server_url, prompt_id, args.maxwait)
 
-            if "error" in result:
-                err = result["error"].get("message", str(result["error"]))
-                final_result["error"] = err
-                import re
+        if "error" in result:
+            err = result["error"].get("message", str(result["error"]))
+            final_result["error"] = err
+            import re
 
-                models = re.findall(r"([^/\s]+\.safetensors)", err)
-                if models:
-                    final_result["missing_models"] = [
-                        f"/opt/appdata/comfyui/models/checkpoints/{m}"
-                        for m in set(models)
-                    ]
-                raise ValueError(err)
+            models = re.findall(r"([^/\s]+\.safetensors)", err)
+            if models:
+                final_result["missing_models"] = [
+                    f"/opt/appdata/comfyui/models/checkpoints/{m}" for m in set(models)
+                ]
+            raise ValueError(err)
 
-            print_and_log("Downloading images...")
-            images = [
-                img
-                for node in result.get("outputs", {}).values()
-                for img in node.get("images", [])
-            ]
-            if not images:
-                raise ValueError("No images generated")
+        print_and_log("Downloading images...")
+        images = [
+            img
+            for node in result.get("outputs", {}).values()
+            for img in node.get("images", [])
+        ]
+        if not images:
+            raise ValueError("No images generated")
 
-            downloaded = []
-            for img in images:
-                local_path = download_file(server_url, img)
-                if Path(local_path).exists():
-                    downloaded.append(local_path)
-                else:
-                    raise IOError(f"Downloaded file not found: {local_path}")
+        downloaded = []
+        for img in images:
+            local_path = download_file(server_url, img)
+            if Path(local_path).exists():
+                downloaded.append(local_path)
+            else:
+                raise IOError(f"Downloaded file not found: {local_path}")
 
-            for f in downloaded:
-                if not Path(f).exists():
-                    raise IOError(f"Verification failed: {f} not found")
+        for f in downloaded:
+            if not Path(f).exists():
+                raise IOError(f"Verification failed: {f} not found")
 
-            final_result["status"] = "success"
-            final_result["local_images"] = downloaded
-            final_result["error"] = None
-            final_result["verified"] = True
+        final_result["status"] = "success"
+        final_result["local_images"] = downloaded
+        final_result["error"] = None
+        final_result["verified"] = True
 
     except Exception as e:
         if workflow_path:
