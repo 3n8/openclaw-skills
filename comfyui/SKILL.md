@@ -39,6 +39,41 @@ That's it! The script handles everything - queue, wait for completion, download.
 
 **--follow** does the same thing but shows verbose output (for debugging).
 
+## CRITICAL: Multiple Images MUST be Parallel!
+
+If the user wants 10 images, you MUST queue all 10 at once in PARALLEL:
+
+```bash
+# DO NOT wait for one to finish before starting the next!
+# ALL OF THESE MUST RUN AT THE SAME TIME:
+
+exec python3 comfyui_run.py --prompt-file /tmp/p1.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p2.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p3.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p4.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p5.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p6.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p7.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p8.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p9.txt &
+exec python3 comfyui_run.py --prompt-file /tmp/p10.txt &
+
+# Wait for all to complete
+wait
+```
+
+The `&` runs each command in background so they all queue at once!
+
+**DO NOT:**
+- Wait for image 1 to finish before starting image 2
+- Run them one by one
+- Be slow
+
+**DO:**
+- Queue all at once using `&`
+- They will all generate in parallel on the GPU
+- The script will automatically wait and download each one
+
 ```bash
 # CORRECT for single image:
 echo "your prompt here" > /tmp/p.txt
