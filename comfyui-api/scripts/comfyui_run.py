@@ -65,6 +65,7 @@ LOG_DIR = DEFAULT_LOG_DIR
 final_result = {
     "status": "failed",
     "prompt_id": None,
+    "prompt_ids": [],
     "local_images": [],
     "error": "unknown_error",
     "missing_models": [],
@@ -327,17 +328,7 @@ def extract_missing_models(err: str):
         ]
 
 
-def await_poll_only(server_url, prompt_id, max_wait=900):
-    if not verify_queued_or_history(server_url, prompt_id):
-        final_result["error"] = f"Prompt {prompt_id} not found in queue or history"
-        raise ValueError(final_result["error"])
-
-    final_result["prompt_id"] = prompt_id
-    final_result["status"] = "polling"
-    print_and_log(f"Polling for prompt {prompt_id}...")
-
-    result = poll_history(server_url, prompt_id, max_wait)
-
+def collect_history_images(server_url, result):
     if "error" in result:
         err = result["error"].get("message", str(result["error"]))
         final_result["error"] = err
@@ -361,6 +352,22 @@ def await_poll_only(server_url, prompt_id, max_wait=900):
         if not Path(f).exists():
             raise IOError(f"Verification failed: {f} not found")
 
+    return downloaded
+
+
+def await_poll_only(server_url, prompt_id, max_wait=900):
+    if not verify_queued_or_history(server_url, prompt_id):
+        final_result["error"] = f"Prompt {prompt_id} not found in queue or history"
+        raise ValueError(final_result["error"])
+
+    final_result["prompt_id"] = prompt_id
+    final_result["status"] = "polling"
+    print_and_log(f"Polling for prompt {prompt_id}...")
+
+    result = poll_history(server_url, prompt_id, max_wait)
+
+    downloaded = collect_history_images(server_url, result)
+
     final_result["status"] = "success"
     final_result["local_images"] = downloaded
     final_result["error"] = None
@@ -382,7 +389,10 @@ def main():
         parser.add_argument("--follow", action="store_true", help="Verbose progress output while waiting (still waits and downloads)")
         parser.add_argument("--await", dest="await_prompt_id", default=None, help="Poll for completion of a previously queued prompt (provide prompt_id)")
         parser.add_argument("--upscaler", default="2x", choices=["2x", "4x", "4x_legacy"], help="Upscaler model: 2x (default), 4x, or 4x_legacy")
+        parser.add_argument("--count", type=int, default=1, help="Generate N variations using the same prompt (different random seeds)")
         args = parser.parse_args()
+        if args.count < 1:
+            raise ValueError("--count must be >= 1")
 
         server_url = resolve_server_config(args)
         print_and_log(f"Using server: {server_url}")
@@ -416,50 +426,37 @@ def main():
         if negative and len(negative) > 5000:
             print_and_log("Warning: Negative prompt is very long (>5000 chars), this may cause issues")
 
-        if args.workflow:
-            workflow_path = Path(args.workflow).expanduser().resolve()
-            print_and_log(f"Custom workflow: {workflow_path}")
-        else:
-            workflow_path = prepare_tmp_workflow(prompt, negative, args.upscaler)
-
-        print_and_log(f"Queueing on {server_url}...")
-        prompt_id = queue_prompt(server_url, workflow_path)
-        final_result["prompt_id"] = prompt_id
-        print_and_log(f"Queued! ID: {prompt_id}")
-
-        cleanup_tmp_workflow(workflow_path)
-        workflow_path = None
-
-        if not verify_queued_or_history(server_url, prompt_id):
-            raise ValueError(f"Prompt {prompt_id} not found in queue after submission")
-
-        result = poll_history(server_url, prompt_id, args.maxwait)
-
-        if "error" in result:
-            err = result["error"].get("message", str(result["error"]))
-            final_result["error"] = err
-            extract_missing_models(err)
-            raise ValueError(err)
-
-        print_and_log("Downloading images...")
-        images = [img for node in result.get("outputs", {}).values() for img in node.get("images", [])]
-        if not images:
-            raise ValueError("No images generated")
-
-        downloaded = []
-        for img in images:
-            local_path = download_file(server_url, img)
-            if Path(local_path).exists():
-                downloaded.append(local_path)
+        all_downloaded = []
+        prompt_ids = []
+        for idx in range(args.count):
+            if args.count > 1:
+                print_and_log(f"\n=== Variation {idx + 1}/{args.count} ===")
+            if args.workflow:
+                workflow_path = Path(args.workflow).expanduser().resolve()
+                print_and_log(f"Custom workflow: {workflow_path}")
             else:
-                raise IOError(f"Downloaded file not found: {local_path}")
+                workflow_path = prepare_tmp_workflow(prompt, negative, args.upscaler)
 
-        for f in downloaded:
-            if not Path(f).exists():
-                raise IOError(f"Verification failed: {f} not found")
+            print_and_log(f"Queueing on {server_url}...")
+            prompt_id = queue_prompt(server_url, workflow_path)
+            prompt_ids.append(prompt_id)
+            if idx == 0:
+                final_result["prompt_id"] = prompt_id
+            print_and_log(f"Queued! ID: {prompt_id}")
 
+            cleanup_tmp_workflow(workflow_path)
+            workflow_path = None
+
+            if not verify_queued_or_history(server_url, prompt_id):
+                raise ValueError(f"Prompt {prompt_id} not found in queue after submission")
+
+            result = poll_history(server_url, prompt_id, args.maxwait)
+            downloaded = collect_history_images(server_url, result)
+            all_downloaded.extend(downloaded)
+
+        final_result["prompt_ids"] = prompt_ids
+        final_result["local_images"] = all_downloaded
         final_result["status"] = "success"
-        final_result["local_images"] = downloaded
         final_result["error"] = None
         final_result["verified"] = True
 

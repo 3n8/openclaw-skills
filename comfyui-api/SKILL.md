@@ -14,11 +14,11 @@ metadata: {"clawdbot":{"emoji":"🖼️","requires":{"bins":["python3"]}}}
 ## Scope
 This skill is the low-level ComfyUI API execution skill.
 
-Current reliable mode:
+Current reliable modes:
 - Prompt-based image generation (txt2img-style workflow using the provided runner script)
+- Variation (same prompt, multiple seeds) via `--count`
 
 Planned modes (script upgrades):
-- Variation (same prompt, multiple seeds)
 - Upscale (standalone input image upscale)
 - Image editing (img2img / inpaint) - last, and avoid Flux-first workflows
 
@@ -60,6 +60,12 @@ echo "bad quality, blurry" > /tmp/negative.txt
 python3 /home/en/.openclaw/skills/comfyui-api/scripts/comfyui_run.py --positive /tmp/positive.txt --negative-file /tmp/negative.txt
 ```
 
+
+Variation example (same prompt, 4 seeds):
+```bash
+echo "your prompt" > /tmp/positive.txt
+python3 /home/en/.openclaw/skills/comfyui-api/scripts/comfyui_run.py --positive /tmp/positive.txt --count 4
+```
 Supported current flags:
 - `--positive` (required prompt file)
 - `--negative-file`
@@ -72,6 +78,7 @@ Supported current flags:
 - `--follow`
 - `--await`
 - `--upscaler` (`2x`, `4x`, `4x_legacy`)
+- `--count` (same prompt, multiple seeds / variations)
 
 ## Multiple Image Requests (current best practice)
 For multiple images, queue multiple runs in parallel with different prompt files (or prompt variants) and `wait`.
