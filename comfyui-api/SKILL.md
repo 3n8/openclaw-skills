@@ -35,14 +35,16 @@ This skill now has a local config file:
 Current profile scaffold:
 - `hel` (default)
 
-The runner script will be upgraded to support config-driven host selection. Until then, the existing `--server` override remains the reliable way to point at a different ComfyUI instance.
+The runner script now supports config-driven host selection plus CLI overrides.
 
-Planned CLI override precedence (for the upgraded runner):
+CLI override precedence:
 1. `--server` (full URL)
 2. `--host` / `--port`
 3. `config.yml`
 
 ## Current Generation Workflow (what works today)
+
+The script remains generation-focused. Config/override support is now available without changing the generation flow.
 Use the provided runner script directly. It queues, waits, verifies, and downloads images.
 
 Required usage pattern:
@@ -58,11 +60,14 @@ echo "bad quality, blurry" > /tmp/negative.txt
 python3 /home/en/.openclaw/skills/comfyui-api/scripts/comfyui_run.py --positive /tmp/positive.txt --negative-file /tmp/negative.txt
 ```
 
-Supported current flags (script today):
+Supported current flags:
 - `--positive` (required prompt file)
 - `--negative-file`
 - `--workflow`
+- `--config`
 - `--server`
+- `--host`
+- `--port`
 - `--maxwait`
 - `--follow`
 - `--await`
