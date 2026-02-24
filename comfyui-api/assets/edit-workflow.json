@@ -80,36 +80,11 @@
       "title": "VAE Decode"
     }
   },
-  "9": {
-    "inputs": {
-      "model_name": "RealESRGAN_x2.pth"
-    },
-    "class_type": "UpscaleModelLoader",
-    "_meta": {
-      "title": "Load Upscale Model"
-    }
-  },
-  "10": {
-    "inputs": {
-      "image": [
-        "8",
-        0
-      ],
-      "upscale_model": [
-        "9",
-        0
-      ]
-    },
-    "class_type": "ImageUpscaleWithModel",
-    "_meta": {
-      "title": "Upscale Image (AI)"
-    }
-  },
   "11": {
     "inputs": {
       "filename_prefix": "ComfyUI",
       "images": [
-        "10",
+        "8",
         0
       ]
     },
