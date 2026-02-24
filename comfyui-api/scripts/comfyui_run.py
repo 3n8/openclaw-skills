@@ -82,6 +82,7 @@ final_result = {
     "mode": None,
     "prompt_id": None,
     "local_images": [],
+    "comfyui_images": [],
     "error": "unknown_error",
     "missing_models": [],
     "verified": False,
@@ -395,6 +396,18 @@ def build_view_url(server_url, img_info):
     return url
 
 
+def build_image_record(server_url, img_info):
+    record = {
+        "filename": img_info.get("filename"),
+        "subfolder": img_info.get("subfolder", ""),
+        "type": img_info.get("type", "output"),
+        "view_url": build_view_url(server_url, img_info),
+    }
+    if img_info.get("format"):
+        record["format"] = img_info.get("format")
+    return record
+
+
 def cleanup_tmp_workflow(workflow_path):
     if workflow_path and "tmp-workflow-" in str(workflow_path):
         try:
@@ -430,18 +443,24 @@ def extract_missing_models(err: str):
         ]
 
 
-def collect_history_images(server_url, result):
+def collect_history_images(server_url, result, download=True):
     if "error" in result:
         err = result["error"].get("message", str(result["error"]))
         final_result["error"] = err
         extract_missing_models(err)
         raise ValueError(err)
 
-    print_and_log("Downloading images...")
     images = [img for node in result.get("outputs", {}).values() for img in node.get("images", [])]
     if not images:
         raise ValueError("No images generated")
 
+    image_records = [build_image_record(server_url, img) for img in images]
+    final_result["comfyui_images"] = image_records
+
+    if not download:
+        return []
+
+    print_and_log("Downloading images...")
     downloaded = []
     for img in images:
         local_path = download_file(server_url, img)
@@ -457,7 +476,7 @@ def collect_history_images(server_url, result):
     return downloaded
 
 
-def await_poll_only(server_url, prompt_id, max_wait=900):
+def await_poll_only(server_url, prompt_id, max_wait=900, download=True):
     if not verify_queued_or_history(server_url, prompt_id):
         final_result["error"] = f"Prompt {prompt_id} not found in queue or history"
         raise ValueError(final_result["error"])
@@ -468,7 +487,7 @@ def await_poll_only(server_url, prompt_id, max_wait=900):
 
     result = poll_history(server_url, prompt_id, max_wait)
 
-    downloaded = collect_history_images(server_url, result)
+    downloaded = collect_history_images(server_url, result, download=download)
 
     final_result["status"] = "success"
     final_result["local_images"] = downloaded
@@ -494,6 +513,7 @@ def main():
         parser.add_argument("--await", dest="await_prompt_id", default=None, help="Poll for completion of a previously queued prompt (provide prompt_id)")
         parser.add_argument("--upscaler", default="2x", choices=["2x", "4x", "4x_legacy"], help="Upscaler model: 2x (default), 4x, or 4x_legacy")
         parser.add_argument("--denoise", type=float, default=0.45, help="Edit strength for --mode edit (0.0-1.0)")
+        parser.add_argument("--no-download", action="store_true", help="Do not download outputs locally; return ComfyUI view URLs/metadata only")
         args = parser.parse_args()
         if not (0.0 <= args.denoise <= 1.0):
             raise ValueError("--denoise must be between 0.0 and 1.0")
@@ -504,7 +524,7 @@ def main():
         print_and_log(f"Download dir: {LOCAL_DOWNLOAD_DIR}")
 
         if args.await_prompt_id:
-            await_poll_only(server_url, args.await_prompt_id, args.maxwait)
+            await_poll_only(server_url, args.await_prompt_id, args.maxwait, download=not args.no_download)
             return
 
         prompt = None
@@ -565,7 +585,7 @@ def main():
             raise ValueError(f"Prompt {prompt_id} not found in queue after submission")
 
         result = poll_history(server_url, prompt_id, args.maxwait)
-        downloaded = collect_history_images(server_url, result)
+        downloaded = collect_history_images(server_url, result, download=not args.no_download)
         final_result["local_images"] = downloaded
         final_result["status"] = "success"
         final_result["error"] = None

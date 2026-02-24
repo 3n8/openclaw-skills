@@ -85,6 +85,7 @@ Supported current flags:
 - `--await`
 - `--upscaler` (`2x`, `4x`, `4x_legacy`)
 - `--denoise` (edit strength for `--mode edit`, `0.0` to `1.0`)
+- `--no-download` (skip local file download and return ComfyUI `view_url` metadata only)
 
 ## Multiple Image Requests (current best practice)
 For multiple images, queue multiple runs in parallel with different prompt files (or prompt variants) and `wait`.
@@ -99,7 +100,11 @@ Success requires:
 - `"mode"` matches the requested mode
 
 ## Output Contract (low-level skill)
-This skill should return the runner JSON result and absolute local file paths.
+This skill should return the runner JSON result.
+
+Preferred downstream fields:
+- `comfyui_images[]` (includes `view_url`, filename, subfolder, type) for direct fetch/upload workflows
+- `local_images[]` (downloaded local file paths) for Eden path-based rendering or local fallbacks
 
 Do not assume the delivery surface here.
 A separate wrapper skill decides whether to:

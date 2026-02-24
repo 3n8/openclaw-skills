@@ -43,10 +43,11 @@ Never silently send the image to a different platform than the originating reque
 
 ## Eden-specific note
 Eden can render local file paths if they are in an allowlisted mounted directory and Eden serves them via `/api/media`.
-The wrapper may return absolute local paths for Eden.
+The wrapper may return absolute local paths for Eden, or prefer `comfyui_images[].view_url` when Eden can fetch from the ComfyUI server.
 
 ## Discord / Matrix note
 Prefer direct upload via the channel/plugin if available.
+Best path (when reachable): fetch bytes from `comfyui_images[].view_url` and upload directly, instead of depending on local downloads.
 A raw local path may still be useful as fallback diagnostics, but is not the preferred user-facing result.
 
 ## Verification before delivery
