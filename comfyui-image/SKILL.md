@@ -1,9 +1,9 @@
 ---
 name: ComfyUI Image Router
-description: Channel-aware wrapper skill for ComfyUI image tasks. Selects mode (generate/variation/upscale/edit), calls the ComfyUI API skill, and returns results to the same surface (Eden, Discord, or Matrix) when possible with explicit fallback behavior.
+description: Channel-aware wrapper skill for ComfyUI image tasks. Selects mode (generate/upscale/edit), calls the ComfyUI API skill, and returns results to the same surface (Eden, Discord, or Matrix) when possible with explicit fallback behavior.
 read_when:
   - User asks for images and the agent may need to return them in Eden, Discord, or Matrix
-  - User asks for ComfyUI image generation, variation, upscaling, or editing workflows
+  - User asks for ComfyUI image generation, upscaling, or editing workflows
   - Channel-aware media delivery behavior matters
 ---
 
@@ -21,13 +21,13 @@ Keep this skill separate so the backend can later swap between:
 ## Mode Selection (policy)
 Choose one mode:
 - `generate` (prompt -> image)
-- `variation` (same prompt, multiple seeds) [first implementation target]
 - `upscale` (input image -> larger image)
 - `edit` (img2img / inpaint) [last]
 
 Current backend reality:
 - `generate` works reliably now
-- `variation/upscale/edit` depend on upcoming `comfyui-api` script upgrades
+- `upscale` is available in `comfyui-api` `--mode upscale`
+- `edit` is available in `comfyui-api` `--mode edit` but should be treated as experimental until runtime-tested
 
 ## Channel-Aware Return Policy (Eden / Discord / Matrix)
 Always prefer returning the result in the same surface where the request came from.

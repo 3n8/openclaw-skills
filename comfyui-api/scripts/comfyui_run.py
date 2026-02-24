@@ -5,6 +5,10 @@ Supports config.yml host profiles plus CLI overrides:
 - --server http://host:port (full URL override)
 - --host <profile-name-or-hostname>
 - --port <port>
+Modes:
+- generate (txt2img workflow)
+- upscale (input image -> upscaled output)
+- edit (img2img-style edit, Pony-friendly default workflow)
 Always returns structured JSON.
 """
 
@@ -23,6 +27,7 @@ from urllib.parse import quote
 
 
 SKILL_BASE_CANDIDATES = [
+    Path(__file__).resolve().parents[1],  # current script location (repo or runtime)
     Path("/home/en/.openclaw/skills/comfyui-api"),
     Path("/home/en/.openclaw/skills/comfyui"),  # backward compatibility for local installs not yet renamed
     Path("/home/en/git/openclaw-skills/comfyui-api"),  # local repo testing
@@ -42,19 +47,29 @@ ASSETS_DIR = SKILL_BASE / "assets"
 CONFIG_PATH = SKILL_BASE / "config.yml"
 
 
-def resolve_default_workflow() -> Path:
-    candidates = [
-        ASSETS_DIR / "imagegen_workflow.json",
-        ASSETS_DIR / "default-workflow.json",
-        ASSETS_DIR / "default-workflow-realistic.json",
-    ]
+def resolve_first_existing(candidates) -> Path:
     for candidate in candidates:
         if candidate.exists():
             return candidate
     return candidates[0]
 
 
+def resolve_default_workflow() -> Path:
+    candidates = [
+        ASSETS_DIR / "imagegen_workflow.json",
+        ASSETS_DIR / "default-workflow.json",
+        ASSETS_DIR / "default-workflow-realistic.json",
+    ]
+    return resolve_first_existing(candidates)
+
+
 DEFAULT_WORKFLOW = resolve_default_workflow()
+UPSCALE_WORKFLOW = resolve_first_existing([
+    ASSETS_DIR / "upscale-workflow.json",
+])
+EDIT_WORKFLOW = resolve_first_existing([
+    ASSETS_DIR / "edit-workflow.json",
+])
 DEFAULT_DOWNLOAD_DIR = Path(os.path.expanduser("~/Downloads/ComfyUI"))
 DEFAULT_LOG_DIR = Path(os.path.expanduser("~/.openclaw/logs/ComfyUI"))
 
@@ -64,8 +79,8 @@ LOG_DIR = DEFAULT_LOG_DIR
 
 final_result = {
     "status": "failed",
+    "mode": None,
     "prompt_id": None,
-    "prompt_ids": [],
     "local_images": [],
     "error": "unknown_error",
     "missing_models": [],
@@ -220,14 +235,32 @@ UPSCALER_MODELS = {
 }
 
 
-def prepare_tmp_workflow(prompt, negative=None, upscaler="2x"):
-    print_and_log("Loading default workflow...")
-    if not DEFAULT_WORKFLOW.exists():
-        final_result["error"] = f"Default workflow missing: {DEFAULT_WORKFLOW}"
+def load_workflow_json(workflow_path: Path) -> dict:
+    if not workflow_path.exists():
+        final_result["error"] = f"Workflow missing: {workflow_path}"
         raise FileNotFoundError(final_result["error"])
+    with open(workflow_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-    with open(DEFAULT_WORKFLOW, "r", encoding="utf-8") as f:
-        workflow = json.load(f)
+
+def save_tmp_workflow(workflow: dict) -> Path:
+    tmp_workflow = ASSETS_DIR / f"tmp-workflow-{uuid.uuid4().hex[:8]}.json"
+    print_and_log(f"Writing unique workflow: {tmp_workflow.name}...")
+    with open(tmp_workflow, "w", encoding="utf-8") as f:
+        json.dump(workflow, f, indent=2)
+    return tmp_workflow
+
+
+def maybe_set_upscaler_model(workflow: dict, upscaler: str):
+    if "9" in workflow and "inputs" in workflow["9"] and "model_name" in workflow["9"]["inputs"]:
+        model_key = upscaler if upscaler in UPSCALER_MODELS else "4x"
+        workflow["9"]["inputs"]["model_name"] = UPSCALER_MODELS[model_key]
+        print_and_log(f"Using {upscaler} upscaler: {workflow['9']['inputs']['model_name']}")
+
+
+def prepare_generate_workflow(prompt, negative=None, upscaler="2x"):
+    print_and_log("Loading generate workflow...")
+    workflow = load_workflow_json(DEFAULT_WORKFLOW)
 
     print_and_log("Modifying prompt/negative/seed...")
     if "6" in workflow:
@@ -236,18 +269,41 @@ def prepare_tmp_workflow(prompt, negative=None, upscaler="2x"):
         workflow["7"]["inputs"]["text"] = negative
     if "3" in workflow:
         workflow["3"]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
+    maybe_set_upscaler_model(workflow, upscaler)
+    return save_tmp_workflow(workflow)
 
-    if "9" in workflow and "model_name" in workflow["9"]["inputs"]:
-        model_key = upscaler if upscaler in UPSCALER_MODELS else "4x"
-        workflow["9"]["inputs"]["model_name"] = UPSCALER_MODELS[model_key]
-        print_and_log(f"Using {upscaler} upscaler: {workflow['9']['inputs']['model_name']}")
 
-    tmp_workflow = ASSETS_DIR / f"tmp-workflow-{uuid.uuid4().hex[:8]}.json"
-    print_and_log(f"Writing unique workflow: {tmp_workflow.name}...")
-    with open(tmp_workflow, "w", encoding="utf-8") as f:
-        json.dump(workflow, f, indent=2)
+def input_image_name(upload_meta: dict) -> str:
+    name = upload_meta.get("name") or upload_meta.get("filename")
+    subfolder = upload_meta.get("subfolder") or ""
+    if not name:
+        raise ValueError(f"Upload response missing image name: {upload_meta}")
+    return f"{subfolder}/{name}" if subfolder else name
 
-    return tmp_workflow
+
+def prepare_upscale_workflow(upload_meta: dict, upscaler="2x"):
+    print_and_log("Loading upscale workflow...")
+    workflow = load_workflow_json(UPSCALE_WORKFLOW)
+    if "12" in workflow:
+        workflow["12"]["inputs"]["image"] = input_image_name(upload_meta)
+    maybe_set_upscaler_model(workflow, upscaler)
+    return save_tmp_workflow(workflow)
+
+
+def prepare_edit_workflow(prompt, upload_meta: dict, negative=None, upscaler="2x", denoise=0.45):
+    print_and_log("Loading edit workflow...")
+    workflow = load_workflow_json(EDIT_WORKFLOW)
+    if "6" in workflow:
+        workflow["6"]["inputs"]["text"] = prompt
+    if negative and "7" in workflow:
+        workflow["7"]["inputs"]["text"] = negative
+    if "3" in workflow:
+        workflow["3"]["inputs"]["seed"] = random.randint(0, 2**64 - 1)
+        workflow["3"]["inputs"]["denoise"] = float(denoise)
+    if "12" in workflow:
+        workflow["12"]["inputs"]["image"] = input_image_name(upload_meta)
+    maybe_set_upscaler_model(workflow, upscaler)
+    return save_tmp_workflow(workflow)
 
 
 def queue_prompt(server_url, workflow_path):
@@ -260,6 +316,52 @@ def queue_prompt(server_url, workflow_path):
     if not pid:
         raise ValueError("No prompt_id returned")
     return pid
+
+
+def upload_input_image(server_url, image_path: Path):
+    image_path = image_path.expanduser().resolve()
+    if not image_path.exists():
+        raise FileNotFoundError(f"Input image not found: {image_path}")
+
+    boundary = f"----openclawcomfy{uuid.uuid4().hex}"
+    filename = image_path.name
+    mime = "application/octet-stream"
+    lower = filename.lower()
+    if lower.endswith(".png"):
+        mime = "image/png"
+    elif lower.endswith((".jpg", ".jpeg")):
+        mime = "image/jpeg"
+    elif lower.endswith(".webp"):
+        mime = "image/webp"
+
+    file_bytes = image_path.read_bytes()
+    parts = []
+    for key, value in (("overwrite", "true"), ("type", "input")):
+        parts.append(f"--{boundary}\r\n".encode("utf-8"))
+        parts.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode("utf-8"))
+    parts.append(f"--{boundary}\r\n".encode("utf-8"))
+    parts.append(
+        (
+            f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+            f"Content-Type: {mime}\r\n\r\n"
+        ).encode("utf-8")
+    )
+    parts.append(file_bytes)
+    parts.append(b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+    body = b"".join(parts)
+
+    url = f"{server_url.rstrip('/')}/upload/image"
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+            print_and_log(f"Uploaded input image to ComfyUI: {payload}")
+            return payload
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"ComfyUI image upload failed ({e.code}): {err_body}") from e
 
 
 def poll_history(server_url, prompt_id, max_wait=600):
@@ -378,8 +480,10 @@ def main():
     workflow_path = None
     try:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--positive", required=True, help="File containing positive prompt (REQUIRED)")
+        parser.add_argument("--mode", default="generate", choices=["generate", "upscale", "edit"], help="Run mode")
+        parser.add_argument("--positive", required=False, help="File containing positive prompt (required for generate/edit)")
         parser.add_argument("--negative-file", default=None, help="File containing negative prompt (optional)")
+        parser.add_argument("--input-image", default=None, help="Input image path (required for upscale/edit)")
         parser.add_argument("--workflow", default=None, help="Custom workflow JSON path (optional, skips prompt modification)")
         parser.add_argument("--config", default=None, help="Path to config.yml (optional override)")
         parser.add_argument("--server", default=None, help="Full server URL override, e.g. http://Hel:8188")
@@ -389,10 +493,11 @@ def main():
         parser.add_argument("--follow", action="store_true", help="Verbose progress output while waiting (still waits and downloads)")
         parser.add_argument("--await", dest="await_prompt_id", default=None, help="Poll for completion of a previously queued prompt (provide prompt_id)")
         parser.add_argument("--upscaler", default="2x", choices=["2x", "4x", "4x_legacy"], help="Upscaler model: 2x (default), 4x, or 4x_legacy")
-        parser.add_argument("--count", type=int, default=1, help="Generate N variations using the same prompt (different random seeds)")
+        parser.add_argument("--denoise", type=float, default=0.45, help="Edit strength for --mode edit (0.0-1.0)")
         args = parser.parse_args()
-        if args.count < 1:
-            raise ValueError("--count must be >= 1")
+        if not (0.0 <= args.denoise <= 1.0):
+            raise ValueError("--denoise must be between 0.0 and 1.0")
+        final_result["mode"] = args.mode
 
         server_url = resolve_server_config(args)
         print_and_log(f"Using server: {server_url}")
@@ -402,13 +507,18 @@ def main():
             await_poll_only(server_url, args.await_prompt_id, args.maxwait)
             return
 
-        prompt_path = Path(args.positive).expanduser().resolve()
-        if not prompt_path.exists():
-            raise FileNotFoundError(
-                f"Positive prompt file not found: {prompt_path}. You must CREATE the file first - the script does not create files for you. Example: echo 'your prompt' > /tmp/positive.txt"
-            )
-        prompt = prompt_path.read_text(encoding="utf-8").strip()
-        prompt_name = prompt_path.stem
+        prompt = None
+        prompt_name = "prompt"
+        if args.mode in {"generate", "edit"}:
+            if not args.positive:
+                raise ValueError("--positive is required for --mode generate and --mode edit")
+            prompt_path = Path(args.positive).expanduser().resolve()
+            if not prompt_path.exists():
+                raise FileNotFoundError(
+                    f"Positive prompt file not found: {prompt_path}. You must CREATE the file first - the script does not create files for you. Example: echo 'your prompt' > /tmp/positive.txt"
+                )
+            prompt = prompt_path.read_text(encoding="utf-8").strip()
+            prompt_name = prompt_path.stem
 
         negative = None
         if args.negative_file:
@@ -416,46 +526,47 @@ def main():
             if neg_path.exists():
                 negative = neg_path.read_text(encoding="utf-8").strip()
 
-        log_prompt(prompt, prompt_name)
-
-        if not prompt or not prompt.strip():
-            raise ValueError(
-                "Error: --positive file is EMPTY! You must write a prompt to the file first. Example: echo 'beautiful landscape' > /tmp/positive.txt"
-            )
-
+        if prompt is not None:
+            log_prompt(prompt, prompt_name)
+            if not prompt.strip():
+                raise ValueError(
+                    "Error: --positive file is EMPTY! You must write a prompt to the file first. Example: echo 'beautiful landscape' > /tmp/positive.txt"
+                )
         if negative and len(negative) > 5000:
             print_and_log("Warning: Negative prompt is very long (>5000 chars), this may cause issues")
 
-        all_downloaded = []
-        prompt_ids = []
-        for idx in range(args.count):
-            if args.count > 1:
-                print_and_log(f"\n=== Variation {idx + 1}/{args.count} ===")
-            if args.workflow:
-                workflow_path = Path(args.workflow).expanduser().resolve()
-                print_and_log(f"Custom workflow: {workflow_path}")
-            else:
-                workflow_path = prepare_tmp_workflow(prompt, negative, args.upscaler)
+        uploaded_image = None
+        if args.mode in {"upscale", "edit"}:
+            if not args.input_image:
+                raise ValueError("--input-image is required for --mode upscale and --mode edit")
+            uploaded_image = upload_input_image(server_url, Path(args.input_image))
 
-            print_and_log(f"Queueing on {server_url}...")
-            prompt_id = queue_prompt(server_url, workflow_path)
-            prompt_ids.append(prompt_id)
-            if idx == 0:
-                final_result["prompt_id"] = prompt_id
-            print_and_log(f"Queued! ID: {prompt_id}")
+        if args.workflow:
+            workflow_path = Path(args.workflow).expanduser().resolve()
+            print_and_log(f"Custom workflow: {workflow_path}")
+        elif args.mode == "generate":
+            workflow_path = prepare_generate_workflow(prompt, negative, args.upscaler)
+        elif args.mode == "upscale":
+            workflow_path = prepare_upscale_workflow(uploaded_image, args.upscaler)
+        elif args.mode == "edit":
+            workflow_path = prepare_edit_workflow(prompt, uploaded_image, negative, args.upscaler, args.denoise)
+        else:
+            raise ValueError(f"Unsupported mode: {args.mode}")
 
-            cleanup_tmp_workflow(workflow_path)
-            workflow_path = None
+        print_and_log(f"Queueing on {server_url}...")
+        prompt_id = queue_prompt(server_url, workflow_path)
+        final_result["prompt_id"] = prompt_id
+        print_and_log(f"Queued! ID: {prompt_id}")
 
-            if not verify_queued_or_history(server_url, prompt_id):
-                raise ValueError(f"Prompt {prompt_id} not found in queue after submission")
+        cleanup_tmp_workflow(workflow_path)
+        workflow_path = None
 
-            result = poll_history(server_url, prompt_id, args.maxwait)
-            downloaded = collect_history_images(server_url, result)
-            all_downloaded.extend(downloaded)
+        if not verify_queued_or_history(server_url, prompt_id):
+            raise ValueError(f"Prompt {prompt_id} not found in queue after submission")
 
-        final_result["prompt_ids"] = prompt_ids
-        final_result["local_images"] = all_downloaded
+        result = poll_history(server_url, prompt_id, args.maxwait)
+        downloaded = collect_history_images(server_url, result)
+        final_result["local_images"] = downloaded
         final_result["status"] = "success"
         final_result["error"] = None
         final_result["verified"] = True
