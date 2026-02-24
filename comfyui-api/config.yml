@@ -1,0 +1,11 @@
+version: 1
+active_host: hel
+hosts:
+  hel:
+    scheme: http
+    host: Hel
+    port: 8188
+    timeout_seconds: 900
+    download_dir: ~/Downloads/ComfyUI
+    log_dir: ~/.openclaw/logs/ComfyUI
+    default_upscaler: 2x
