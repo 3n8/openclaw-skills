@@ -1,0 +1,11 @@
+version: 1
+skill: nc-upload
+description: Minimal Nextcloud upload + share-link helper (binary-safe).
+default:
+  url: https://sky.nettsi.de
+  user: openclaw
+  # NEXTCLOUD_TOKEN should be set in environment or in /home/en/.openclaw/nextcloud/.env (mode 600).
+  # The skill auto-loads /home/en/.openclaw/nextcloud/.env when present.
+  env_token: NEXTCLOUD_TOKEN
+  read_timeout_seconds: 120
+  upload_max_bytes: 104857600  # 100 MB safety cap
