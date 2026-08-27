@@ -42,6 +42,23 @@ CLI override precedence:
 2. `--host` / `--port`
 3. `config.yml`
 
+## Resolution Policy (2026-08-27)
+**Default = 2k.** All callers should produce 2k (2048²) outputs unless explicitly asked for 4k or higher.
+
+| Resolution | Output | File size | Typical use |
+|---|---|---|---|
+| **2k** (2048²) | default | ~3.5–4 MB | All NSFW/SFW delivery, inline-renders in Matrix |
+| 4k (4096²) | opt-in only | ~10–15 MB | Master explicitly asks; borderline inline |
+| 8k (8192²) | **forbidden** without explicit ask | ~47 MB | Fails to inline-render, burns time |
+
+**How to stay at 2k:**
+- Use `nondefault_PonyRealism` (or any `nondefault_*` preset) for `--mode generate`. The workflow's built-in `--upscaler 2x` makes Pass 1 output 2k.
+- Run `--mode edit --denoise 0.20–0.45` for face/anatomy fix. Stays at 2k.
+- **Do NOT add a Pass 3 upscale** unless the caller says "4k" or higher.
+
+**How to deliver 4k (when explicitly asked):**
+- After the 2k Pass 1+Pass 2, run `--mode upscale --upscaler 2x` as Pass 3. Yields 4096².
+
 ## Current Workflow Modes (what works today)
 
 Use the provided runner script directly. It queues, waits, verifies, uploads input images when needed, and downloads outputs.
@@ -62,7 +79,7 @@ python3 /home/en/.openclaw/skills/comfyui-api/scripts/comfyui_run.py --positive 
 
 Standalone upscale example:
 ```bash
-python3 /home/en/.openclaw/skills/comfyui-api/scripts/comfyui_run.py --mode upscale --input-image /tmp/input.png --host hel --upscaler 4x
+python3 /home/en/.openclaw/skills/comfyui-api/scripts/comfyui_run.py --mode upscale --input-image /tmp/input.png --host hel --upscaler 2x  # 2k is default; only use 4x/4x_legacy if caller explicitly asks
 ```
 
 Image edit example (img2img-style):
@@ -84,6 +101,7 @@ Supported current flags:
 - `--follow`
 - `--await`
 - `--upscaler` (`2x`, `4x`, `4x_legacy`)
+  - **Default = `2x` (produces 2k / 2048² output). 4k is opt-in only** — do not run `--upscaler 2x` Pass 3 unless the caller explicitly asks for 4k. Never run `--upscaler 4x_legacy` (produces 8k / 8192², ~47 MB, fails to inline-render in Matrix and burns time/disk).
 - `--denoise` (edit strength for `--mode edit`, `0.0` to `1.0`)
 - `--no-download` (skip local file download and return ComfyUI `view_url` metadata only)
 
